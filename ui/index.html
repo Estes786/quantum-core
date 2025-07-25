@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Core - AI Analyzer</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; background-color: #0f0f0f; color: #f0f0f0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        #container { width: 100%; max-width: 500px; background-color: #1c1c1c; padding: 25px; border-radius: 10px; border: 1px solid #333; }
+        h1 { text-align: center; color: #fff; }
+        textarea { width: 100%; box-sizing: border-box; padding: 12px; background-color: #252525; color: #fff; border: 1px solid #444; border-radius: 5px; resize: vertical; margin-bottom: 15px; }
+        button { width: 100%; padding: 12px 15px; background-color: #007bff; color: #fff; font-weight: bold; border: none; border-radius: 5px; cursor: pointer; transition: background-color 0.2s; }
+        button:disabled { background-color: #555; cursor: not-allowed; }
+        #status, #result { margin-top: 15px; padding: 12px; border-radius: 5px; font-size: 0.9em; }
+        #status { background-color: #333; }
+        #result { background-color: #252525; white-space: pre-wrap; word-wrap: break-word; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>Quantum Core AI</h1>
+        <textarea id="text-input" rows="4" placeholder="Masukkan teks untuk dianalisis..."></textarea>
+        <button id="analyze-button">Analyze Text</button>
+        <div id="status">Status: Siap menerima input...</div>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        // --- KONFIGURASI (GANTI DENGAN KREDENSIAL ANDA ) ---
+        const SUPABASE_URL = 'GANTI_DENGAN_URL_SUPABASE_ANDA';
+        const SUPABASE_ANON_KEY = 'GANTI_DENGAN_ANON_KEY_SUPABASE_ANDA';
+        const BACKEND_API_URL = 'GANTI_DENGAN_URL_BACKEND_VERCEL_ANDA';
+        // ----------------------------------------------------
+
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const textInput = document.getElementById('text-input');
+        const analyzeButton = document.getElementById('analyze-button');
+        const statusDiv = document.getElementById('status');
+        const resultDiv = document.getElementById('result');
+
+        analyzeButton.addEventListener('click', async () => {
+            const text = textInput.value;
+            if (!text) {
+                alert('Silakan masukkan teks terlebih dahulu.');
+                return;
+            }
+
+            statusDiv.textContent = 'Status: Menghubungi Backend AI...';
+            resultDiv.textContent = '';
+            analyzeButton.disabled = true;
+
+            try {
+                // 1. Kirim teks ke Backend AI
+                const apiResponse = await fetch(BACKEND_API_URL + '/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: text })
+                });
+
+                if (!apiResponse.ok) {
+                    const errorData = await apiResponse.json();
+                    throw new Error(`API Error: ${errorData.error || apiResponse.statusText}`);
+                }
+
+                const analysisData = await apiResponse.json();
+                const sentiment = analysisData[0].label;
+                const score = analysisData[0].score.toFixed(4);
+
+                statusDiv.textContent = 'Status: Analisis selesai. Menyimpan hasil ke database...';
+                resultDiv.textContent = `Sentiment: ${sentiment}\nConfidence: ${score}`;
+
+                // 2. Kirim hasilnya ke Supabase
+                const review_id = `core-test-${Date.now()}`;
+                const { error: dbError } = await supabaseClient
+                    .from('analysis_results')
+                    .insert({ id: review_id, original_text: text, sentiment, confidence_score: score });
+
+                if (dbError) {
+                    throw new Error(`Database Error: ${dbError.message}`);
+                }
+
+                statusDiv.textContent = `Status: Hasil berhasil disimpan ke database.`;
+
+            } catch (error) {
+                statusDiv.textContent = `Error: ${error.message}`;
+                console.error(error);
+            } finally {
+                analyzeButton.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
